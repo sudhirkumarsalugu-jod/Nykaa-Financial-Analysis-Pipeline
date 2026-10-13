@@ -11,7 +11,7 @@ pd.set_option('display.width', 1000)
 conn = mysql.connect(
     host = "localhost",
     user= "root",
-    password = "Your Password s",
+    password = "Your Password",
     database = "nykaa_analysis")
 
 if conn :
