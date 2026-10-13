@@ -2,6 +2,9 @@
 import pandas as pd
 import mysql.connector as mysql
 import matplotlib.pyplot as plt
+import os
+
+os.makedirs("charts", exist_ok=True)
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.width', 1000)
@@ -11,7 +14,7 @@ pd.set_option('display.width', 1000)
 conn = mysql.connect(
     host = "localhost",
     user= "root",
-    password = "Your Password",
+    password = "Your password ",
     database = "nykaa_analysis")
 
 if conn :
@@ -85,17 +88,24 @@ axes[0][1].set_yticks([])
 axes[0][1].set_ylim(top=axes[0][1].get_ylim()[1] * 1.20)
 
 # Chart 3: Stacked bar + Sales line
-expense_columns = ['Raw Material Cost', 'Power and Fuel', 'Employee Cost', 'Selling and admin', 'Other Expenses']
+df_pnl_detailed_wide["Net Material Cost"] = df_pnl_detailed_wide["Raw Material Cost"] - df_pnl_detailed_wide["Change in Inventory"]
+
+expense_columns = [
+    "Net Material Cost", "Other Mfr. Exp", "Power and Fuel",
+    "Employee Cost", "Selling and admin", "Other Expenses",
+]
 running_total = 0
+
 for c in expense_columns:
     axes[1][0].bar(df_pnl_detailed_wide.index, df_pnl_detailed_wide[c], bottom=running_total, label=c)
     running_total = running_total + df_pnl_detailed_wide[c]
 
 for year, total_value in zip(df_pnl_detailed_wide.index, running_total):
-    axes[1][0].text(year, total_value + 100, str(round(total_value, 1)))
+    axes[1][0].text(year, total_value - 150, str(round(total_value, 0)), color="white", ha="center")
 
 
 df_pnl_wide['Sales'].plot(ax=axes[1][0])
+axes[1][0].set_ylabel("Rs crore")
 axes[1][0].set_title("Sales vs. Expense Composition")
 axes[1][0].legend()
 
@@ -103,14 +113,14 @@ axes[1][0].legend()
 axes[1][1].set_title("Sales Trend")
 df_pnl_detailed_wide['Sales'].plot(ax=axes[1][1])
 for year, sales_value in zip(df_pnl_wide.index, df_pnl_wide['Sales']):
-    axes[1][1].text(year, sales_value + 400, str(round(sales_value, 1)))
+    axes[1][0].text(year, total_value - 150, str(round(total_value, 0)), color="white", ha="center", fontsize=9, fontweight="bold")
 
 axes[1][1].set_yticks([])
 axes[1][1].set_ylim(top=axes[1][1].get_ylim()[1] * 1.10)
 axes[1][1].set_ylabel("Values in Crores")
 
-fig1.savefig("pnl_ratio_chart.png", dpi=200, bbox_inches="tight")
 fig1.tight_layout()
+fig1.savefig("charts/pnl_ratio_chart.png", dpi=200, bbox_inches="tight")
 fig1.show()
 
 #-----------------------------------------------------------------------------------------#
@@ -130,51 +140,42 @@ df_combined_bs['Debt to Equity'] = df_combined_bs['Borrowings'] / (df_combined_b
 df_pnl_wide['Interest Coverage'] = df_pnl_wide['Operating Profit'] / df_pnl_wide['Interest']
 
 
-
-
 #=================================================
 #            Balancesheet Charts
 #=================================================
 
 fig2, axes = plt.subplots(2, 2, figsize=(14, 10))
 
-
-#Chart 1: ROE Treand Chart
-
+# Chart 1: ROE trend
 df_combined_bs['ROE%'].plot(ax=axes[0][0])
-axes[0][0].set_title("ROE% Trend")
-axes[0][0].set_ylabel("ROE %")
-axes[0][0].set_xlabel("Years")
+axes[0][0].set_title("ROE % Trend")
+axes[0][0].set_ylabel("ROE (%)")
+axes[0][0].set_xlabel("Year")
 axes[0][0].axhline(0, color="red", linestyle="--")
 
-
-#Chart 2: Debt to Equity 
+# Chart 2: Debt to Equity
 df_combined_bs['Debt to Equity'].plot(ax=axes[0][1])
-axes[0][1].set_title("Debt to Equity Ratio Treand ")
+axes[0][1].set_title("Debt to Equity Ratio Trend")
 axes[0][1].set_ylabel("Debt / Equity (x)")
-axes[0][1].set_xlabel("Years")
+axes[0][1].set_xlabel("Year")
 axes[0][1].axhline(1.0, color="red", linestyle="--")
 
-#Chart 3: Interest Coverage
+# Chart 3: Interest Coverage
 df_pnl_wide['Interest Coverage'].plot(ax=axes[1][0])
 axes[1][0].set_title("Interest Coverage")
 axes[1][0].set_ylabel("Times covered (x)")
-axes[1][0].set_xlabel("Years")
-axes[1][0].set_ylim(bottom=axes[1][0].get_ylim()[1]*0.05)
+axes[1][0].set_xlabel("Year")
+axes[1][0].set_ylim(bottom=0)
 axes[1][0].axhline(1.0, color="red", linestyle="--")
 
-#Chart 4: Operating Profit vs Interest
-
+# Chart 4: Operating Profit vs Interest
 df_pnl_wide['Operating Profit'].plot(ax=axes[1][1])
 df_pnl_wide['Interest'].plot(ax=axes[1][1])
-axes[1][1].set_ylabel("Values In Corers")
-axes[1][1].set_xlabel("Years")
+axes[1][1].set_ylabel("Rs crore")
+axes[1][1].set_xlabel("Year")
 axes[1][1].set_title("Operating Profit vs Interest")
 axes[1][1].legend()
 
-fig2.savefig("balansheet_ratio_chart.png", dpi=200, bbox_inches="tight")
 fig2.tight_layout()
-fig2.show()
-
-
-fig1,fig2.show()
+fig2.savefig("charts/balancesheet_ratio_chart.png", dpi=200, bbox_inches="tight")
+plt.show()
