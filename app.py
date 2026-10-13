@@ -11,7 +11,7 @@ pd.set_option('display.width', 1000)
 conn = mysql.connect(
     host = "localhost",
     user= "root",
-    password = "Encrypted@405",
+    password = "Your Password s",
     database = "nykaa_analysis")
 
 if conn :
@@ -55,7 +55,7 @@ df_pnl_detailed_wide['Other Expenses% of sales'] = df_pnl_detailed_wide['Other E
 #               CHARTS               
 #=================================== 
 
-fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+fig1, axes = plt.subplots(2, 2, figsize=(14, 10))
 
 # Chart 1: Sales vs Expenses
 df_pnl_wide['Sales'].plot(ax=axes[0][0])
@@ -109,8 +109,9 @@ axes[1][1].set_yticks([])
 axes[1][1].set_ylim(top=axes[1][1].get_ylim()[1] * 1.10)
 axes[1][1].set_ylabel("Values in Crores")
 
-#plt.tight_layout()
-#plt.show()
+fig1.savefig("pnl_ratio_chart.png", dpi=200, bbox_inches="tight")
+fig1.tight_layout()
+fig1.show()
 
 #-----------------------------------------------------------------------------------------#
 #                       BALANCE SHEET                           
@@ -135,7 +136,7 @@ df_pnl_wide['Interest Coverage'] = df_pnl_wide['Operating Profit'] / df_pnl_wide
 #            Balancesheet Charts
 #=================================================
 
-fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+fig2, axes = plt.subplots(2, 2, figsize=(14, 10))
 
 
 #Chart 1: ROE Treand Chart
@@ -171,7 +172,9 @@ axes[1][1].set_xlabel("Years")
 axes[1][1].set_title("Operating Profit vs Interest")
 axes[1][1].legend()
 
-plt.tight_layout()
-plt.show()
+fig2.savefig("balansheet_ratio_chart.png", dpi=200, bbox_inches="tight")
+fig2.tight_layout()
+fig2.show()
 
 
+fig1,fig2.show()
