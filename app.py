@@ -14,7 +14,7 @@ pd.set_option('display.width', 1000)
 conn = mysql.connect(
     host = "localhost",
     user= "root",
-    password = "Your password ",
+    password = "Your Password",
     database = "nykaa_analysis")
 
 if conn :
@@ -29,21 +29,21 @@ df_pnl_detailed = pd.read_sql("select * from incomestatement_detailed",con= conn
 df_balancesheet = pd.read_sql("select * from balancesheet_annual",con= conn)
 df_cashflow = pd.read_sql("select * from cashflow_annual",con= conn)
 df_quarters = pd.read_sql("select * from quarters_annual",con= conn)
+df_workincapital = pd.read_sql("select * from Working_capital_annual",con=conn)
 
-
-
-#-----changing Data structure------
+#-----Changing Data Structure------
 df_pnl_wide = df_pnl.pivot(index="Year",columns="Metric",values="Value")
 df_pnl_detailed_wide = df_pnl_detailed.pivot(index="Year",columns="Metric",values="Value")
 df_balancesheet_wide = df_balancesheet.pivot(index="Year",columns="Metric",values="Value")
+df_workincapital_wide = df_workincapital.pivot(index="Year",columns="Metric",values="Value")
 
 #--creating required ratios of pnl statement ----
 df_pnl_wide['Net Profit Margin']= df_pnl_wide['Net profit']/df_pnl_wide['Sales']*100
 df_pnl_wide['Net Operating Margin']= df_pnl_wide['Operating Profit']/df_pnl_wide['Sales']*100
 df_pnl_wide['Sales (prev year)'] = df_pnl_wide['Sales'].shift(1)
-df_pnl_wide['YoY Growth %'] = df_pnl_wide['Sales (prev year)']/df_pnl_wide['Sales']*100
+df_pnl_wide['YoY Growth %'] = (df_pnl_wide['Sales']-df_pnl_wide['Sales (prev year)'])/df_pnl_wide['Sales (prev year)']*100
 df_pnl_wide['Expense (prev year)'] = df_pnl_wide['Expenses'].shift(1)
-df_pnl_wide['YoY Expense %'] = df_pnl_wide['Expense (prev year)']/df_pnl_wide['Expenses']*100
+df_pnl_wide['YoY Expense %'] = (df_pnl_wide['Expenses']-df_pnl_wide['Expense (prev year)'])/df_pnl_wide['Expense (prev year)']*100
 df_pnl_wide["Interest % of sales"] = df_pnl_wide['Interest']/df_pnl_wide['Sales']*100
 df_pnl_wide["Depriciation % of sales"] = df_pnl_wide['Depreciation']/df_pnl_wide['Sales']*100
 
@@ -121,7 +121,6 @@ axes[1][1].set_ylabel("Values in Crores")
 
 fig1.tight_layout()
 fig1.savefig("charts/pnl_ratio_chart.png", dpi=200, bbox_inches="tight")
-fig1.show()
 
 #-----------------------------------------------------------------------------------------#
 #                       BALANCE SHEET                           
@@ -178,4 +177,41 @@ axes[1][1].legend()
 
 fig2.tight_layout()
 fig2.savefig("charts/balancesheet_ratio_chart.png", dpi=200, bbox_inches="tight")
+
+
+#-----------Working Capital Ratios--------------
+
+df_workincapital_wide['Debtor Days'] = (df_workincapital_wide['Debtors']/df_pnl_detailed_wide['Sales'])*365
+df_workincapital_wide['Inventory turn-over']= df_pnl_wide['Sales']/df_workincapital_wide['Inventory']
+df_workincapital_wide['Inventory Days (sales basis)'] = 365/df_workincapital_wide['Inventory turn-over']
+df_workincapital_wide['Inventory Days (cost basis)'] = df_workincapital_wide['Inventory']/df_pnl_detailed_wide['Net Material Cost']*365
+df_workincapital_wide['Operating Cycle (sales basis)'] = df_workincapital_wide['Debtor Days']+df_workincapital_wide['Inventory Days (sales basis)']
+
+
+#print(df_workincapital_wide[['Debtor Days','Inventory Days (sales basis)','Operating Cycle (sales basis)']].round(1))
+
+#================================================
+#             Working capital Charts 
+#================================================
+
+fig3, axes = plt.subplots(figsize=(10,6))
+wc_running_total = 0
+days_column = ['Inventory Days (sales basis)','Debtor Days']
+
+for d in days_column:
+    axes.bar(df_workincapital_wide.index,df_workincapital_wide[d],bottom= wc_running_total, label = d)
+    wc_running_total = wc_running_total+df_workincapital_wide[d]
+
+for year, days  in zip(df_workincapital_wide.index, wc_running_total):
+    axes.text(year, days +2 ,f"{days:.1f}", ha="center")
+
+axes.plot(df_workincapital_wide.index, df_workincapital_wide['Operating Cycle (sales basis)'], marker="o", color="black", label="Operating Cycle")
+axes.set_ylabel("Days")
+axes.set_xlabel("Year")
+axes.set_xticks(df_workincapital_wide.index) and axes.set_xticklabels([f"FY{str(y)[-2:]}" for y in df_workincapital_wide.index])
+axes.legend()
+axes.set_title("Operating Cycle: Inventory Days + Debtor Days (Sales basis)")
+
+fig3.tight_layout()
+fig3.savefig("charts/working_capital_chart.png", dpi=200, bbox_inches="tight")
 plt.show()
