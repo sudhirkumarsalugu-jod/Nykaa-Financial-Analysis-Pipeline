@@ -14,7 +14,7 @@ pd.set_option('display.width', 1000)
 conn = mysql.connect(
     host = "localhost",
     user= "root",
-    password = "Your Password",
+    password = "Encrypted@405",
     database = "nykaa_analysis")
 
 if conn :
@@ -22,7 +22,7 @@ if conn :
 else:
     print("Not Connected ")
 
-
+cursor = conn.cursor()
 #----Data Injection-----
 df_pnl = pd.read_sql("select * from incomestatement_annual",con= conn)
 df_pnl_detailed = pd.read_sql("select * from incomestatement_detailed",con= conn)
@@ -36,6 +36,7 @@ df_pnl_wide = df_pnl.pivot(index="Year",columns="Metric",values="Value")
 df_pnl_detailed_wide = df_pnl_detailed.pivot(index="Year",columns="Metric",values="Value")
 df_balancesheet_wide = df_balancesheet.pivot(index="Year",columns="Metric",values="Value")
 df_workincapital_wide = df_workincapital.pivot(index="Year",columns="Metric",values="Value")
+df_cashflow_wide = df_cashflow.pivot(index="Year",columns="Metric",values = "Value")
 
 #--creating required ratios of pnl statement ----
 df_pnl_wide['Net Profit Margin']= df_pnl_wide['Net profit']/df_pnl_wide['Sales']*100
@@ -101,7 +102,7 @@ for c in expense_columns:
     running_total = running_total + df_pnl_detailed_wide[c]
 
 for year, total_value in zip(df_pnl_detailed_wide.index, running_total):
-    axes[1][0].text(year, total_value - 150, str(round(total_value, 0)), color="white", ha="center")
+    axes[1][0].text(year, total_value - 150, str(round(total_value, 0)), color="black", ha="center")
 
 
 df_pnl_wide['Sales'].plot(ax=axes[1][0])
@@ -186,6 +187,11 @@ df_workincapital_wide['Inventory turn-over']= df_pnl_wide['Sales']/df_workincapi
 df_workincapital_wide['Inventory Days (sales basis)'] = 365/df_workincapital_wide['Inventory turn-over']
 df_workincapital_wide['Inventory Days (cost basis)'] = df_workincapital_wide['Inventory']/df_pnl_detailed_wide['Net Material Cost']*365
 df_workincapital_wide['Operating Cycle (sales basis)'] = df_workincapital_wide['Debtor Days']+df_workincapital_wide['Inventory Days (sales basis)']
+df_workincapital_wide['Change in Inventory'] = df_workincapital_wide['Inventory']-df_workincapital_wide['Inventory'].shift(1)
+df_workincapital_wide['Change in Debtors'] = df_workincapital_wide['Debtors']-df_workincapital_wide['Debtors'].shift(1)
+df_workincapital_wide['Cash effect of Inventory'] = df_workincapital_wide['Change in Inventory']*-1
+df_workincapital_wide['Cash effect of Debtors'] = df_workincapital_wide['Change in Debtors']*-1
+df_workincapital_wide['WC cash effect'] = df_workincapital_wide['Cash effect of Debtors']+df_workincapital_wide['Cash effect of Inventory']
 
 
 #print(df_workincapital_wide[['Debtor Days','Inventory Days (sales basis)','Operating Cycle (sales basis)']].round(1))
@@ -214,4 +220,53 @@ axes.set_title("Operating Cycle: Inventory Days + Debtor Days (Sales basis)")
 
 fig3.tight_layout()
 fig3.savefig("charts/working_capital_chart.png", dpi=200, bbox_inches="tight")
-plt.show()
+#plt.show()
+
+
+#---------------Cash Flow Ratios------------
+df_combined_2 = pd.merge(df_pnl_wide,df_cashflow_wide,left_index= True , right_index= True) #merging both tables
+
+
+df_combined_2['cash conversion ratio'] = df_combined_2['Cash from Operating Activity']/df_combined_2['Net profit']
+
+#print(df_combined_2[['Net profit','Cash from Operating Activity','cash conversion ratio']].round(2))
+
+#print(df_cashflow_wide.round(2))
+
+#print(df_workincapital_wide[['Debtors','Change in Debtors','Inventory', 'Change in Inventory','Cash effect of Inventory','Cash effect of Debtors','WC cash effect']])
+
+#print(df_pnl_wide['Depreciation'])
+
+
+
+#creating a conparison table 
+
+df_comparison = df_workincapital_wide[["WC cash effect"]].join(df_pnl_wide[["Depreciation", "Net profit"]]).join(df_cashflow_wide[["Cash from Operating Activity"]])
+
+df_comparison['Gap'] = df_comparison['Cash from Operating Activity']-df_comparison['Net profit']
+df_comparison['Unexplained'] = df_comparison['Gap']-df_comparison['WC cash effect']-df_comparison['Depreciation']
+
+#creting trade payble from sources 
+
+data = {'Year':[2020,2021,2022,2023,2024,2025,2026],
+    'Trade Payables':[313.27,316.21,362.05,265.39,386.69,634.83,732.50],
+    'source filing':['FY20 results(RHP) consolidated ','RHP and the FY22 results','FY22 and FY23 results.','FY23 results(Nykaa)','FY25 results (comparative column)','FY25 results(Nykaa)','FY26 Results(NSE)']}
+
+
+Trade_Payables = pd.DataFrame(data)
+Trade_Payables = Trade_Payables.set_index("Year")
+
+#joining trade payables to pnl(wide)
+
+df_combined_3 = pd.merge(df_pnl_detailed_wide['Net Material Cost'],Trade_Payables,left_index=True,right_index=True)
+
+df_cash_conversion = pd.merge(df_combined_3['Trade Payables'],df_workincapital_wide[['Debtor Days','Inventory Days (cost basis)']],left_index=True,right_index=True)
+
+df_cash_conversion['Payable Days'] = Trade_Payables['Trade Payables']/df_combined_3['Net Material Cost']*365
+df_cash_conversion['Cash conversion cycle (days)'] = df_cash_conversion['Inventory Days (cost basis)']+df_cash_conversion['Debtor Days']-df_cash_conversion['Payable Days']
+
+df_comparison['Trade Payables'] = Trade_Payables['Trade Payables']
+df_comparison['Cash effect of Payables'] = df_comparison['Trade Payables']-df_comparison['Trade Payables'].shift(1)
+df_comparison['WC Total(Inc Payables)'] = df_workincapital_wide['WC cash effect'] + df_comparison['Cash effect of Payables']
+df_comparison['Unexplained(New)'] = df_comparison['Gap']-df_comparison['WC Total(Inc Payables)']-df_comparison['Depreciation']
+print(df_comparison)
