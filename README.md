@@ -87,11 +87,31 @@ Chart: `charts/working_capital_chart.png`
 
 My first prediction was that operating cash flow (OCF) would be higher than net profit. It turned out to be higher in only 4 of the 7 years.
 
+| FY | OCF (Rs cr) | Net profit (Rs cr) | OCF / Net profit | What I take from it |
+|---|---|---|---|---|
+| FY20 | 6.15 | -16.61 | -0.37x | Ratio means nothing (loss year), so I compare the rupees instead |
+| FY21 | 133.18 | 61.55 | 2.16x | Can be used |
+| FY22 | -353.96 | 41.08 | -8.62x | Only the sign matters: profit was positive but cash was negative |
+| FY23 | -140.24 | 19.26 | -7.28x | Only the sign matters |
+| FY24 | 0.25 | 32.27 | 0.01x | Profit gave almost no operating cash |
+| FY25 | 466.63 | 66.08 | 7.06x | Only the direction, because the small profit makes the ratio look huge |
+| FY26 | 644.30 | 199.44 | 3.23x | The most believable size, but it still needs an explanation |
+
 This ratio breaks when profit is negative or very small, so in those years I look at the sign or the rupee amounts and not the size of the ratio.
 
 ## Free cash flow
 
 Free cash flow = operating cash flow - capex. For capex I used the line "Fixed assets purchased" from Screener's expanded Cash from Investing section. I did not use the whole investing total. In FY22 the investing total was -603 but fixed assets purchased were only -94, because most of the rest went into other investments and subsidiaries. Capex is in whole rupees, so my free cash flow is approximate. I typed these values into the code by hand and noted the source.
+
+| FY | FCF (Rs cr, approx.) |
+|---|---|
+| FY20 | -40 |
+| FY21 | 91 |
+| FY22 | -448 |
+| FY23 | -348 |
+| FY24 | -111 |
+| FY25 | 340 |
+| FY26 | 490 |
 
 Free cash flow was negative from FY22 to FY24. I read this as a fast-growing company building up inventory and capacity with IPO money, not as a business in trouble.
 
@@ -102,6 +122,16 @@ Screener has no trade payables line (it is hidden inside Other Liabilities, alon
 - Payable Days = Trade Payables / Net Material Cost x 365
 - Cash Conversion Cycle = Inventory Days (Cost basis) + Debtor Days - Payable Days
 
+| FY | Trade payables (Rs cr) | Payable days | Cash conversion cycle (days) |
+|---|---|---|---|
+| FY20 | 313.27 | 112.7 | 67.9 |
+| FY21 | 316.21 | 77.3 | 55.9 |
+| FY22 | 362.05 | 62.0 | 97.1 |
+| FY23 | 265.39 | 33.8 | 105.8 |
+| FY24 | 386.69 | 38.7 | 94.4 |
+| FY25 | 634.83 | 51.8 | 75.2 |
+| FY26 | 732.50 | 48.6 | 70.8 |
+
 - From FY20 to FY26, inventory days got about 51 days better and debtor days about 10 days better. But payable days fell by about 64 days, so the cash conversion cycle ended almost where it started (about 68 to about 71 days). It was highest in FY23 at about 106 days.
 - I do not know why payable days fell. That is still a hypothesis.
 - Payables also include suppliers other than stock suppliers (marketing, for example), while my base is only net material cost, so these days are approximate. This cycle is also a different measure from the sales-basis operating cycle above.
@@ -109,6 +139,15 @@ Screener has no trade payables line (it is hidden inside Other Liabilities, alon
 ## Why OCF is different from net profit
 
 Gap = OCF - net profit. I split the gap into working capital changes (estimated from year-end balance sheet differences), depreciation (a cost that uses no cash), and whatever is left unexplained. When an asset like inventory or debtors goes up, it uses cash. When a liability like payables goes up, it releases cash.
+
+| FY | Gap | Inventory, debtors and payables | Depreciation | Unexplained |
+|---|---|---|---|---|
+| FY21 | 71.63 | -28.02 | 71.59 | 28.06 |
+| FY22 | -395.04 | -349.58 | 96.41 | -141.87 |
+| FY23 | -159.50 | -295.18 | 173.26 | -37.58 |
+| FY24 | -32.02 | -143.68 | 224.23 | -112.57 |
+| FY25 | 400.55 | 17.64 | 266.40 | 116.51 |
+| FY26 | 444.86 | -169.72 | 320.33 | 294.25 |
 
 - OCF was lower than profit in FY22, FY23 and FY24, and negative in FY22 and FY23. The inventory build is the main thing I could measure (FY22 inventory went up by about Rs 378 cr), but it only explains part of the gap, and it is an estimate.
 - In FY23, payables also fell by about Rs 97 cr, so Nykaa paid its suppliers down and that used more cash.
