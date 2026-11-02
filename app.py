@@ -14,7 +14,7 @@ pd.set_option('display.width', 1000)
 conn = mysql.connect(
     host = "localhost",
     user= "root",
-    password = "Your Password",
+    password = "Your Password ",
     database = "nykaa_analysis")
 
 if conn :
@@ -77,7 +77,7 @@ axes[0][0].set_ylim(top=axes[0][0].get_ylim()[1] * 1.20)
 
 
 # Chart 2: Operating Margin %
-# Chart 2: Operating Margin %
+
 df_pnl_wide['Net Operating Margin'].plot(ax=axes[0][1])
 axes[0][1].set_title("Operating Margin %")
 
@@ -127,7 +127,7 @@ fig1.savefig("charts/pnl_ratio_chart.png", dpi=200, bbox_inches="tight")
 #                       BALANCE SHEET                           
 #-----------------------------------------------------------------------------------------
 
-df_combined_bs = pd.merge(df_pnl_wide, df_balancesheet_wide, left_index=True, right_index=True)
+df_combined_bs = pd.merge(df_pnl_wide, df_balancesheet_wide, left_index=True, right_index=True)  #Combined Balace Sheet And P&L Statement
 
 #=============================================
 #               Balancesheet Ratio 
@@ -224,7 +224,7 @@ fig3.savefig("charts/working_capital_chart.png", dpi=200, bbox_inches="tight")
 
 
 #---------------Cash Flow Ratios------------
-df_combined_2 = pd.merge(df_pnl_wide,df_cashflow_wide,left_index= True , right_index= True) #merging both tables
+df_combined_2 = pd.merge(df_pnl_wide,df_cashflow_wide,left_index= True , right_index= True) #P&L And Cashflow Combined 
 
 
 df_combined_2['cash conversion ratio'] = df_combined_2['Cash from Operating Activity']/df_combined_2['Net profit']
@@ -239,8 +239,7 @@ df_combined_2['cash conversion ratio'] = df_combined_2['Cash from Operating Acti
 
 
 
-#creating a conparison table 
-
+#creating a conparison table to compare the distrubution across the cashflow 
 df_comparison = df_workincapital_wide[["WC cash effect"]].join(df_pnl_wide[["Depreciation", "Net profit"]]).join(df_cashflow_wide[["Cash from Operating Activity"]])
 
 df_comparison['Gap'] = df_comparison['Cash from Operating Activity']-df_comparison['Net profit']
@@ -269,4 +268,91 @@ df_comparison['Trade Payables'] = Trade_Payables['Trade Payables']
 df_comparison['Cash effect of Payables'] = df_comparison['Trade Payables']-df_comparison['Trade Payables'].shift(1)
 df_comparison['WC Total(Inc Payables)'] = df_workincapital_wide['WC cash effect'] + df_comparison['Cash effect of Payables']
 df_comparison['Unexplained(New)'] = df_comparison['Gap']-df_comparison['WC Total(Inc Payables)']-df_comparison['Depreciation']
-print(df_comparison)
+
+#Creating DCF 
+sales_base = 10022.35 #2026 Sales 
+Growth = [0.22, 0.19, 0.16, 0.13, 0.10] #Growth Assumption Rates For 2027 - 2031
+fc_Operating_Margin = [0.08, 0.085, 0.09, 0.095, 0.10] #Forecasted Operating Margin Assumption Rates For 2027 - 2031
+fc_capex = [0.018684, 0.022004, 0.025323, 0.028643, 0.031962]
+discount_rate = 0.12 #Fixed Discount Rate 
+terminal_growth = 0.05
+
+
+dep_share = 320.33 / 10022.35 # Depriciation Share Calculation for future depriciation values
+
+#calculating forcasted sales value on the basis growth assumption
+fc_sales = []                       
+current_sales = sales_base          
+
+for g in Growth:
+    new_sales = current_sales * (1 + g)   
+    fc_sales.append(new_sales)            
+    current_sales = new_sales             
+
+fc_year = [2027,2028,2029,2030,2031]
+
+#Creating a table for forecasted sales
+
+forecasts = pd.DataFrame(fc_sales,index= fc_year,columns=["Sales"])
+
+forecasts.index.name = "Year" 
+
+#Working Capital Ratios On The Basis Of Forecasted Sales 
+
+forecasts['Op Margin'] = fc_Operating_Margin
+forecasts['Op Profit'] = forecasts['Op Margin']*forecasts['Sales']
+forecasts["Depreciation"] = forecasts["Sales"] * dep_share
+forecasts["EBIT"] = forecasts['Op Profit'] - forecasts["Depreciation"] 
+forecasts["NOPAT"] = forecasts["EBIT"] *(1-0.25)
+forecasts["Capex"] = forecasts['Sales']*fc_capex
+forecasts["Increse in WC"] = 0.1196*(forecasts['Sales']-forecasts['Sales'].shift(1,fill_value=sales_base))
+forecasts["FCFF"] = forecasts["NOPAT"]+forecasts["Depreciation"]-forecasts["Capex"]-forecasts["Increse in WC"]
+
+#discount the cash flows to today
+forecasts["Discount Factor"] = 1/(1.12**(forecasts.index-2026))
+forecasts["PV of FCFF"] = forecasts["FCFF"]*forecasts["Discount Factor"]
+terminal_value = forecasts['FCFF'].iloc[-1]*(1+terminal_growth)/(discount_rate-terminal_growth)
+present_value_tv = terminal_value*forecasts['Discount Factor'].iloc[-1]
+enterprise_value = forecasts['PV of FCFF'].sum()+present_value_tv
+
+
+#print(terminal_value,present_value_tv,enterprise_value)
+#print(present_value_tv/enterprise_value*100)
+
+#calculations on todays value 02-11-2026
+Borrowings = 1237.81 #NSE updated borrowings including leases and non current borrowings
+Cash_Bank_bl = 320.03 #FY26 filing, NSE
+Nykaa_share_price = 349.50 #as per NSE on 02-11-2026
+shares_cr = 286.43 
+
+Net_Debt = Borrowings-Cash_Bank_bl
+Equity_Value = enterprise_value-Net_Debt
+Value_per_share =Equity_Value/shares_cr
+
+Upside = round((Value_per_share/Nykaa_share_price-1)*100,1)
+
+#print(Net_Debt,Equity_Value,Value_per_share,Upside)
+
+discount_rates = [0.11, 0.12, 0.13, 0.14]
+growth_rates = [0.04, 0.05, 0.06]
+shares_cr = 286.43                      # crore shares, Sep 2026 shareholding
+
+rows = []                               # one row of results per discount rate
+
+for d in discount_rates:
+    # PV of the five forecast cash flows at THIS rate 
+    pv_sum = (forecasts['FCFF'] / (1 + d) ** (forecasts.index - 2026)).sum()
+
+    row = []                            # results for this rate across the growth rates
+    for g in growth_rates:
+        tv = forecasts['FCFF'].iloc[-1] * (1 + g) / (d - g)   # terminal value
+        pv_tv = tv / (1 + d) ** len(forecasts)                # discounted 5 years
+        ev = pv_sum + pv_tv                                   # enterprise value
+        value_ps = (ev - Net_Debt) / shares_cr                # value per share
+        row.append(value_ps)
+    rows.append(row)
+
+sensitivity = pd.DataFrame(rows, index=discount_rates, columns=growth_rates).round(1)
+sensitivity.index.name = "Discount rate"
+print(sensitivity)
+
