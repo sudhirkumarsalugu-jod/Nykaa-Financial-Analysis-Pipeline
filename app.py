@@ -6,7 +6,7 @@ import os
 
 os.makedirs("charts", exist_ok=True)
 
-pd.set_option('display.max_columns', None)
+pd.set_option('display.max_columns',None)
 pd.set_option('display.width', 1000)
 
 #-----Sql Connection ---------
@@ -14,7 +14,7 @@ pd.set_option('display.width', 1000)
 conn = mysql.connect(
     host = "localhost",
     user= "root",
-    password = "Your Password ",
+    password = "Encrypted@405",
     database = "nykaa_analysis")
 
 if conn :
@@ -241,9 +241,9 @@ df_combined_2['cash conversion ratio'] = df_combined_2['Cash from Operating Acti
 
 #creating a conparison table to compare the distrubution across the cashflow 
 df_comparison = df_workincapital_wide[["WC cash effect"]].join(df_pnl_wide[["Depreciation", "Net profit"]]).join(df_cashflow_wide[["Cash from Operating Activity"]])
-
 df_comparison['Gap'] = df_comparison['Cash from Operating Activity']-df_comparison['Net profit']
 df_comparison['Unexplained'] = df_comparison['Gap']-df_comparison['WC cash effect']-df_comparison['Depreciation']
+
 
 #creting trade payble from sources 
 
@@ -251,9 +251,14 @@ data = {'Year':[2020,2021,2022,2023,2024,2025,2026],
     'Trade Payables':[313.27,316.21,362.05,265.39,386.69,634.83,732.50],
     'source filing':['FY20 results(RHP) consolidated ','RHP and the FY22 results','FY22 and FY23 results.','FY23 results(Nykaa)','FY25 results (comparative column)','FY25 results(Nykaa)','FY26 Results(NSE)']}
 
-
 Trade_Payables = pd.DataFrame(data)
 Trade_Payables = Trade_Payables.set_index("Year")
+
+#Creating Ratios From Trade Payables
+df_comparison['Trade Payables'] = Trade_Payables['Trade Payables']
+df_comparison['Cash effect of Payables'] = df_comparison['Trade Payables']-df_comparison['Trade Payables'].shift(1)
+df_comparison['WC Total(Inc Payables)'] = df_workincapital_wide['WC cash effect'] + df_comparison['Cash effect of Payables']
+df_comparison['Unexplained(New)'] = df_comparison['Gap']-df_comparison['WC Total(Inc Payables)']-df_comparison['Depreciation']
 
 #joining trade payables to pnl(wide)
 
@@ -264,10 +269,37 @@ df_cash_conversion = pd.merge(df_combined_3['Trade Payables'],df_workincapital_w
 df_cash_conversion['Payable Days'] = Trade_Payables['Trade Payables']/df_combined_3['Net Material Cost']*365
 df_cash_conversion['Cash conversion cycle (days)'] = df_cash_conversion['Inventory Days (cost basis)']+df_cash_conversion['Debtor Days']-df_cash_conversion['Payable Days']
 
-df_comparison['Trade Payables'] = Trade_Payables['Trade Payables']
-df_comparison['Cash effect of Payables'] = df_comparison['Trade Payables']-df_comparison['Trade Payables'].shift(1)
-df_comparison['WC Total(Inc Payables)'] = df_workincapital_wide['WC cash effect'] + df_comparison['Cash effect of Payables']
-df_comparison['Unexplained(New)'] = df_comparison['Gap']-df_comparison['WC Total(Inc Payables)']-df_comparison['Depreciation']
+#Creating Free Cash Flow Values From Screener 
+#Screener.in, consolidated, expanded Cash from Investing, “Fixed assets purchased”, Rs crore (negative = cash out)
+
+data1 = {"Year" :[2020,2021,2022,2023,2024,2025,2026],
+    'Fixed assets purchased':[-46,-42, -94, -208, -111, -127, -154]}
+    
+df_capex = pd.DataFrame(data1 )
+df_capex = df_capex.set_index("Year")
+
+df_comparison['Fixed assets purchased'] = df_capex['Fixed assets purchased']
+
+df_comparison['FCF'] = df_comparison['Cash from Operating Activity']+df_comparison['Fixed assets purchased']
+
+#print(df_comparison.round(1))
+
+#Cash Conversion Chart 
+
+fig4, axes = plt.subplots(figsize=(10,6))
+df_cash_conversion['Payable Days'].plot(ax=axes)
+df_cash_conversion['Debtor Days'].plot(ax=axes)
+df_cash_conversion['Inventory Days (cost basis)'].plot(ax=axes)
+axes.plot(df_cash_conversion.index, df_cash_conversion['Cash conversion cycle (days)'], marker="o", linewidth=4, color="black", label="Cash conversion cycle")
+axes.grid(True)
+axes.set_xlabel("Fiscal Year")
+axes.set_ylabel("Days")
+axes.legend()
+axes.set_title("Cycle ended where it started: shorter supplier credit offset faster inventory")
+
+fig4.tight_layout()
+fig4.savefig("charts/cash_coversion", dpi=200, bbox_inches="tight")
+
 
 #Creating DCF 
 sales_base = 10022.35 #2026 Sales 
@@ -354,5 +386,30 @@ for d in discount_rates:
 
 sensitivity = pd.DataFrame(rows, index=discount_rates, columns=growth_rates).round(1)
 sensitivity.index.name = "Discount rate"
-print(sensitivity)
+
+ref1 = pd.DataFrame()
+
+ref1['Net profit'] = df_comparison['Net profit']
+ref1['Operating cash flow'] = df_comparison['Cash from Operating Activity']
+ref1['Free cash flow'] = df_comparison['FCF']
+
+#Cash Flow Chart:
+
+fig5, axes = plt.subplots(figsize=(10, 6))
+ref1[['Operating cash flow', 'Free cash flow']].plot(kind='bar', ax=axes)
+
+for container in axes.containers:
+    axes.bar_label(container, fmt='%.0f', padding=3, fontsize=8)
+
+axes.plot(range(len(ref1)), ref1['Net profit'], marker='o', color='black', linewidth=2.5, label='Net profit')
+axes.axhline(0, color='black', linewidth=0.8) 
+axes.set_title("Operating cash flow was below profit in FY22 to FY24, then far above it")
+axes.set_ylabel("Rs crore")
+axes.set_xlabel("Fiscal Year")
+plt.xticks(rotation=0)
+axes.legend()
+plt.savefig("charts/cash_flow_chart.png", dpi=200, bbox_inches="tight")
+
+
+
 

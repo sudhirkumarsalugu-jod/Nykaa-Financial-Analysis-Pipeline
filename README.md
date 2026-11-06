@@ -43,6 +43,7 @@ Indian financial years run April to March and are named by the year they end, so
 - Leverage and debt servicing: debt-to-equity, interest coverage
 - Working capital: debtor days, inventory turnover, inventory days, operating cycle
 - Cash flow: operating cash flow vs net profit, free cash flow, payable days, cash conversion cycle
+- Valuation: a five-year forecast and DCF with a sensitivity table
 
 ## Key findings
 
@@ -57,6 +58,8 @@ Indian financial years run April to March and are named by the year they end, so
 - Sales vs expenses, operating margin, expense contribution to sales (stacked), sales trend
 - ROE, debt-to-equity, interest coverage, operating profit vs interest
 - Working capital: inventory days and debtor days (stacked) with the operating cycle line
+- Cash conversion cycle: inventory days, debtor days and payable days as lines, with the cycle as a thicker line
+- Cash flow: operating cash flow and free cash flow as bars, with net profit as a line
 
 The images are in the `charts/` folder.
 
@@ -115,6 +118,8 @@ Free cash flow = operating cash flow - capex. For capex I used the line "Fixed a
 
 Free cash flow was negative from FY22 to FY24. I read this as a fast-growing company building up inventory and capacity with IPO money, not as a business in trouble.
 
+Chart: `charts/cash_flow_chart.png`. It shows operating cash flow and free cash flow as bars with net profit as a line. FY24 operating cash flow was almost zero (0.25), so its bar is not visible.
+
 ## Payables and the cash conversion cycle
 
 Screener has no trade payables line (it is hidden inside Other Liabilities, along with advances, provisions and lease liabilities), so I could not use it directly. I took consolidated trade payables by hand from the company's results filings, and from the October 2021 Red Herring Prospectus for FY20 and FY21. Each total is the sum of two reported lines (micro and small enterprises, and other creditors). Inventory and receivables in those filings matched my Screener data. The values are in a small DataFrame in my code, with the source written next to each year.
@@ -136,6 +141,8 @@ Screener has no trade payables line (it is hidden inside Other Liabilities, alon
 - I do not know why payable days fell. That is still a hypothesis.
 - Payables also include suppliers other than stock suppliers (marketing, for example), while my base is only net material cost, so these days are approximate. This cycle is also a different measure from the sales-basis operating cycle above.
 
+Chart: `charts/cash_conversion_cycle_chart.png`
+
 ## Why OCF is different from net profit
 
 Gap = OCF - net profit. I split the gap into working capital changes (estimated from year-end balance sheet differences), depreciation (a cost that uses no cash), and whatever is left unexplained. When an asset like inventory or debtors goes up, it uses cash. When a liability like payables goes up, it releases cash.
@@ -155,11 +162,13 @@ Gap = OCF - net profit. I split the gap into working capital changes (estimated 
 - Things I have **not** tested, so they are only hypotheses: employee stock option expense (a non-cash cost), other current assets and liabilities, tax paid, and whether interest paid is shown under financing instead of operating activities.
 - My working capital figures come from balance sheet differences, not from the cash flow statement's own lines, so the whole bridge is an estimate.
 
-DCF Valuation
+# DCF Valuation
 
 I built a simple five-year DCF (FY27 to FY31) in pandas, step by step, and checked each step by hand for FY27. It is a model of my own assumptions, so I treat the result as something to question and not as a price target.
 
-How it works
+## How it works
+
+```
 Forecast sales for FY27 to FY31 (last year's sales x (1 + growth))
    → Operating profit = sales x margin
    → EBIT = operating profit - depreciation
@@ -168,57 +177,71 @@ Forecast sales for FY27 to FY31 (last year's sales x (1 + growth))
    → Discount each year's FCFF back to today at 12%
    → Add a terminal value (cash flows after FY31 growing at 5% for ever), also discounted
    → Enterprise value - net debt = equity value, divided by shares = value per share
+```
 
 FCFF means free cash flow to the firm: the cash left after operating costs, tax (as if there were no debt), capex and extra working capital, before paying lenders and shareholders.
 
-My assumptions
+## My assumptions
 
 All of these are assumptions, not facts. I tied the first two to the trend in my own data.
 
-Input	What I used	Why
-Sales growth FY27 to FY31	22%, 19%, 16%, 13%, 10%	Growth settled at about 24% to 26% in FY24 to FY26, so I started a little lower and faded it
-Operating margin	8.0% rising to 10.0%	It rose from 5.0% (FY23) to 7.5% (FY26), so I continued the trend more slowly
-Depreciation	3.2% of sales	FY26 share of sales (320.33 / 10,022.35)
-Capex	Starts at 1.5% of sales and rises to 3.2% by FY31	Starts at the FY26 level and ends equal to depreciation, so the terminal year does not add back depreciation that is never reinvested
-Working capital	12.0% of the increase in sales	FY26 inventory + debtors - trade payables, as a share of sales
-Tax	25%	Close to the standard Indian corporate rate including surcharge and cess
-Discount rate	12%	A judgement
-Terminal growth	5%	A judgement
-Results
-FY	Sales (Rs cr)	FCFF (Rs cr)
-FY27	12,227	339
-FY28	14,550	446
-FY29	16,879	568
-FY30	19,073	703
-FY31	20,980	842
-Enterprise value is about Rs 9,158 cr. About 78% of it comes from the terminal value, so the answer depends mostly on the assumptions and not on the five forecast years.
-Net debt is Rs 917.8 cr: borrowings including lease liabilities (1,237.8) minus cash and bank balances (320.0), from the FY26 results filing.
-Equity value is about Rs 8,240 cr, which is about Rs 28.8 per share on 286.43 crore shares.
-The share price was Rs 349.50 (NSE, 2 November 2026), so my value is about 92% below it.
-Sensitivity: value per share (Rs) at different discount and terminal growth rates
-Discount rate	Growth 4%	Growth 5%	Growth 6%
-11%	29.9	34.5	40.9
-12%	25.4	28.8	33.2
-13%	22.0	24.5	27.7
-14%	19.2	21.2	23.6
-What I take from it
-The value is very sensitive: it ranges from about Rs 19 to Rs 41 with small changes to two assumptions, so I would never trust one single number from this model.
-Every cell is far below the market price. So the gap is not about the discount rate. It comes from what I assumed for growth and margins, or from something the market is pricing that a five-year model cannot capture. I have not tested which, so that is a hypothesis.
-This is not investment advice, and I am not giving a price target.
-Simplifications in my model
-Depreciation is a fixed share of sales, which is easy to explain but not how depreciation really works.
-Net debt includes lease liabilities, to match Screener's borrowings and the depreciation add-back. I ignored a small non-controlling interest (about Rs 64 cr) and very small investments.
-Other income is not in the forecast, and only the FY26 balance sheet and a share price of one date are used. The share price changes daily, and new quarterly results can change the picture.
-Status and next steps
+| Input | What I used | Why |
+|---|---|---|
+| Sales growth FY27 to FY31 | 22%, 19%, 16%, 13%, 10% | Growth settled at about 24% to 26% in FY24 to FY26, so I started a little lower and faded it |
+| Operating margin | 8.0% rising to 10.0% | It rose from 5.0% (FY23) to 7.5% (FY26), so I continued the trend more slowly |
+| Depreciation | 3.2% of sales | FY26 share of sales (320.33 / 10,022.35) |
+| Capex | Starts at 1.5% of sales and rises to 3.2% by FY31 | Starts at the FY26 level and ends equal to depreciation, so the terminal year does not add back depreciation that is never reinvested |
+| Working capital | 12.0% of the increase in sales | FY26 inventory + debtors - trade payables, as a share of sales |
+| Tax | 25% | Close to the standard Indian corporate rate including surcharge and cess |
+| Discount rate | 12% | A judgement |
+| Terminal growth | 5% | A judgement |
+
+## Results
+
+| FY | Sales (Rs cr) | FCFF (Rs cr) |
+|---|---|---|
+| FY27 | 12,227 | 339 |
+| FY28 | 14,550 | 446 |
+| FY29 | 16,879 | 568 |
+| FY30 | 19,073 | 703 |
+| FY31 | 20,980 | 842 |
+
+- Enterprise value is about Rs 9,158 cr. About 78% of it comes from the terminal value, so the answer depends mostly on the assumptions and not on the five forecast years.
+- Net debt is Rs 917.8 cr: borrowings including lease liabilities (1,237.8) minus cash and bank balances (320.0), from the FY26 results filing.
+- Equity value is about Rs 8,240 cr, which is about **Rs 28.8 per share** on 286.43 crore shares.
+- The share price was Rs 349.50 (NSE, 2 November 2026), so my value is about 92% below it.
+
+### Sensitivity: value per share (Rs) at different discount and terminal growth rates
+
+| Discount rate | Growth 4% | Growth 5% | Growth 6% |
+|---|---|---|---|
+| 11% | 29.9 | 34.5 | 40.9 |
+| 12% | 25.4 | 28.8 | 33.2 |
+| 13% | 22.0 | 24.5 | 27.7 |
+| 14% | 19.2 | 21.2 | 23.6 |
+
+## What I take from it
+
+- The value is very sensitive: it ranges from about Rs 19 to Rs 41 with small changes to two assumptions, so I would never trust one single number from this model.
+- Every cell is far below the market price. So the gap is not about the discount rate. It comes from what I assumed for growth and margins, or from something the market is pricing that a five-year model cannot capture. I have not tested which, so that is a hypothesis.
+- This is not investment advice, and I am not giving a price target.
+
+## Simplifications in my model
+
+- Depreciation is a fixed share of sales, which is easy to explain but not how depreciation really works.
+- Net debt includes lease liabilities, to match Screener's borrowings and the depreciation add-back. I ignored a small non-controlling interest (about Rs 64 cr) and very small investments.
+- Other income is not in the forecast, and only the FY26 balance sheet and a share price of one date are used. The share price changes daily, and new quarterly results can change the picture.
+
+## Status and next steps
 
 Done: the data pipeline (five tables), P&L, balance sheet and quarterly tables, ratio analysis, working capital, cash flow and earnings quality, free cash flow, payables and cash conversion cycle, DCF with a sensitivity table, and the charts listed above.
 
-Next: charts for the cash conversion cycle and cash flow, quarterly analysis (seasonality and growth), common-size statements, a DuPont breakdown of ROE, a peer comparison, and maybe AI-written commentary based on the ratio tables.
+Next: quarterly analysis (seasonality and growth), common-size statements, a DuPont breakdown of ROE, a peer comparison, and maybe AI-written commentary based on the ratio tables.
 
-Data source
+## Data source
 
 Financial statements from Screener.in (public company data). Consolidated trade payables, cash and bank balances come from FSN E-Commerce Ventures' published results filings and its October 2021 Red Herring Prospectus. Share price and share count come from public market data pages. This analysis is for learning and my portfolio, and it is not investment advice.
 
-Tech stack
+## Tech stack
 
 Excel Power Query, MySQL, Python (pandas, matplotlib, mysql-connector-python)
