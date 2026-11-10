@@ -2,6 +2,23 @@
 
 I built this project to analyse Nykaa (FSN E-Commerce Ventures Ltd) from FY20 to FY26. I take the raw Screener.in files, clean them in Excel Power Query, store them in MySQL, and do the analysis in Python with pandas and matplotlib.
 
+## Results at a glance
+
+| Area | FY26 result | What it shows |
+|---|---|---|
+| Sales | Rs 10,022 cr (FY20: Rs 1,768 cr) | About 5.7 times bigger in six years |
+| Operating margin | 7.5% (FY22 low: 4.3%) | Recovered after the FY22 dip |
+| Net profit | Rs 199 cr (FY20: loss of Rs 17 cr) | Moved from loss to profit |
+| ROE | 13.9% | Back up from 1.4% in FY23 |
+| Debt-to-equity | 0.86 (0.52 without leases) | Screener's borrowings include leases |
+| Interest coverage | 6.4x (FY20: 1.8x) | Operating profit grew faster than interest |
+| Operating cash flow | Rs 644 cr | Was negative in FY22 and FY23 |
+| Free cash flow | about Rs 490 cr | Negative from FY22 to FY24 |
+| Cash conversion cycle | about 71 days (FY20: about 68) | Inventory and debtor days improved, payable days fell |
+| DCF value per share | Rs 28.8 (range Rs 19 to Rs 41) | Against a market price of Rs 349.50, so my assumptions and the market are far apart |
+
+![Sales, operating margin and cost structure, FY20 to FY26](charts/pnl_ratio_chart.png)
+
 ## Why I built this
 
 Most finance reporting I have seen depends on spreadsheets that people rebuild by hand every time. I wanted a flow I can repeat: clean the data once, store it in a database, and re-run the analysis when new numbers come in.
@@ -12,12 +29,12 @@ Most finance reporting I have seen depends on spreadsheets that people rebuild b
 Screener.in Excel export (wide format, many tabs)
    → Excel Power Query: remove junk rows and columns, unpivot the years, fix fiscal-year labels
    → CSV export: one file per statement
-   → MySQL: five tables, each in Metric | Year | Value format (quarters also have Quarter)
+   → MySQL: six tables, each in Metric | Year | Value format (quarters also have Quarter)
    → Python (mysql-connector + pandas): pivot long to wide, join on Year, calculate ratios
    → matplotlib: multi-panel charts saved in the charts/ folder
 ```
 
-The five MySQL tables are `incomestatement_annual`, `balancesheet_annual`, `cashflow_annual`, `quarters_annual` and `workingcapital_annual`.
+The six MySQL tables are `incomestatement_annual`, `incomestatement_detailed` (the expense line items such as raw material, employee cost and selling and admin), `balancesheet_annual`, `cashflow_annual`, `quarters_annual` and `Working_capital_annual`.
 
 I kept working capital (Debtors, Inventory, Working Capital) in its own table because Debtors and Inventory are already part of Other Assets in the balance sheet, and Working Capital is a derived number. Putting them together could double count. I also set a primary key on (Metric, Year) so that importing the same file twice gives an error instead of duplicate rows.
 
@@ -55,13 +72,17 @@ Indian financial years run April to March and are named by the year they end, so
 
 ## Charts
 
-- Sales vs expenses, operating margin, expense contribution to sales (stacked), sales trend
-- ROE, debt-to-equity, interest coverage, operating profit vs interest
-- Working capital: inventory days and debtor days (stacked) with the operating cycle line
-- Cash conversion cycle: inventory days, debtor days and payable days as lines, with the cycle as a thicker line
-- Cash flow: operating cash flow and free cash flow as bars, with net profit as a line
+All charts are saved by the script in the `charts/` folder.
 
-The images are in the `charts/` folder.
+**Profit and loss:** sales vs expenses, operating margin, expense contribution to sales (stacked) and the sales trend.
+
+![Profit and loss charts](charts/pnl_ratio_chart.png)
+
+**Balance sheet:** ROE, debt-to-equity, interest coverage, and operating profit vs interest.
+
+![Balance sheet ratio charts](charts/balancesheet_ratio_chart.png)
+
+Working capital, cash conversion cycle and cash flow charts are shown in their own sections below.
 
 # Working Capital Analysis (FY20 to FY26)
 
@@ -75,7 +96,7 @@ Metrics I calculated (I used year-end balances for all of them, like Screener do
 
 *Net Material Cost = Raw Material Cost - Change in Inventory. It is only a proxy for COGS, not a reported COGS figure.*
 
-Chart: `charts/working_capital_chart.png`
+![Operating cycle: inventory days plus debtor days](charts/working_capital_chart.png)
 
 ### Findings
 
@@ -118,7 +139,9 @@ Free cash flow = operating cash flow - capex. For capex I used the line "Fixed a
 
 Free cash flow was negative from FY22 to FY24. I read this as a fast-growing company building up inventory and capacity with IPO money, not as a business in trouble.
 
-Chart: `charts/cash_flow_chart.png`. It shows operating cash flow and free cash flow as bars with net profit as a line. FY24 operating cash flow was almost zero (0.25), so its bar is not visible.
+![Operating cash flow and free cash flow as bars, net profit as a line](charts/cash_flow_chart.png)
+
+The chart shows operating cash flow and free cash flow as bars with net profit as a line. FY24 operating cash flow was almost zero (0.25), so its bar is not visible.
 
 ## Payables and the cash conversion cycle
 
@@ -141,7 +164,7 @@ Screener has no trade payables line (it is hidden inside Other Liabilities, alon
 - I do not know why payable days fell. That is still a hypothesis.
 - Payables also include suppliers other than stock suppliers (marketing, for example), while my base is only net material cost, so these days are approximate. This cycle is also a different measure from the sales-basis operating cycle above.
 
-Chart: `charts/cash_conversion_cycle_chart.png`
+![Cash conversion cycle with inventory, debtor and payable days](charts/cash_conversion_cycle_chart.png)
 
 ## Why OCF is different from net profit
 
@@ -234,9 +257,16 @@ All of these are assumptions, not facts. I tied the first two to the trend in my
 
 ## Status and next steps
 
-Done: the data pipeline (five tables), P&L, balance sheet and quarterly tables, ratio analysis, working capital, cash flow and earnings quality, free cash flow, payables and cash conversion cycle, DCF with a sensitivity table, and the charts listed above.
+Done: the data pipeline (six tables), P&L, balance sheet and quarterly tables, ratio analysis, working capital, cash flow and earnings quality, free cash flow, payables and cash conversion cycle, DCF with a sensitivity table, the charts above, and a cleaned-up script with comments and the database password kept in a `.env` file.
 
 Next: quarterly analysis (seasonality and growth), common-size statements, a DuPont breakdown of ROE, a peer comparison, and maybe AI-written commentary based on the ratio tables.
+
+## How to run it
+
+1. Load the CSV files into a local MySQL database called `nykaa_analysis` (the tables are listed above).
+2. Install the packages: `pip install -r requirements.txt`
+3. Copy `.env.example` to `.env` and write your MySQL password in it (`DB_PASSWORD=...`). The `.env` file is not uploaded to GitHub.
+4. Run `python app.py`. It prints the DCF sensitivity table, net debt and value per share, and saves the charts in `charts/`.
 
 ## Data source
 
@@ -244,4 +274,4 @@ Financial statements from Screener.in (public company data). Consolidated trade 
 
 ## Tech stack
 
-Excel Power Query, MySQL, Python (pandas, matplotlib, mysql-connector-python)
+Excel Power Query, MySQL, Python (pandas, matplotlib, mysql-connector-python, python-dotenv)
