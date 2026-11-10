@@ -1,8 +1,20 @@
+"""Nykaa financial analysis pipeline (FY20-FY26).
+Flow: MySQL tables -> pivot to wide -> ratios -> charts -> cash flow bridge -> DCF.
+All money in Rs crore, consolidated. Run: python app.py
+Inputs: MySQL database nykaa_analysis; DB_PASSWORD environment variable.
+Outputs: PNG charts in /charts."""
+
+
 # pyright: reportMissingModuleSource=false, reportMissingImports=false
 import pandas as pd
 import mysql.connector as mysql
 import matplotlib.pyplot as plt
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+DB_Password = os.getenv("DB_Password") 
 
 os.makedirs("charts", exist_ok=True)
 
@@ -10,20 +22,18 @@ pd.set_option('display.max_columns',None)
 pd.set_option('display.width', 1000)
 
 #-----Sql Connection ---------
-
 conn = mysql.connect(
     host = "localhost",
     user= "root",
-    password = "Your Password",
+    password = DB_Password,
     database = "nykaa_analysis")
 
 if conn :
-    print("Connected Sucessfully ")
+    print("Connected Sucessfully")
 else:
     print("Not Connected ")
 
-cursor = conn.cursor()
-#----Data Injection-----
+#----Data ingestion-----
 df_pnl = pd.read_sql("select * from incomestatement_annual",con= conn)
 df_pnl_detailed = pd.read_sql("select * from incomestatement_detailed",con= conn)
 df_balancesheet = pd.read_sql("select * from balancesheet_annual",con= conn)
@@ -40,20 +50,39 @@ df_cashflow_wide = df_cashflow.pivot(index="Year",columns="Metric",values = "Val
 
 #--creating required ratios of pnl statement ----
 df_pnl_wide['Net Profit Margin']= df_pnl_wide['Net profit']/df_pnl_wide['Sales']*100
-df_pnl_wide['Net Operating Margin']= df_pnl_wide['Operating Profit']/df_pnl_wide['Sales']*100
+df_pnl_wide['Net Operating Margin']= df_pnl_wide['Operating Profit']/df_pnl_wide['Sales']*100 #Operating profit cansidered is before depriciation
 df_pnl_wide['Sales (prev year)'] = df_pnl_wide['Sales'].shift(1)
 df_pnl_wide['YoY Growth %'] = (df_pnl_wide['Sales']-df_pnl_wide['Sales (prev year)'])/df_pnl_wide['Sales (prev year)']*100
 df_pnl_wide['Expense (prev year)'] = df_pnl_wide['Expenses'].shift(1)
 df_pnl_wide['YoY Expense %'] = (df_pnl_wide['Expenses']-df_pnl_wide['Expense (prev year)'])/df_pnl_wide['Expense (prev year)']*100
 df_pnl_wide["Interest % of sales"] = df_pnl_wide['Interest']/df_pnl_wide['Sales']*100
-df_pnl_wide["Depriciation % of sales"] = df_pnl_wide['Depreciation']/df_pnl_wide['Sales']*100
+df_pnl_wide["Depreciation % of sales"] = df_pnl_wide['Depreciation']/df_pnl_wide['Sales']*100
+df_pnl_wide['Interest Coverage'] = df_pnl_wide['Operating Profit'] / df_pnl_wide['Interest'] #interest coverage uses that EBITDA-like profit, so it is flattering compared with an EBIT version
 
-#------------more ratios------------
+#Creating Detailed Ratios
 df_pnl_detailed_wide['Raw Material % of sales'] = df_pnl_detailed_wide['Raw Material Cost']/df_pnl_detailed_wide['Sales']*100
 df_pnl_detailed_wide['Power and Fuel % of sales'] = df_pnl_detailed_wide['Power and Fuel']/df_pnl_detailed_wide['Sales']*100
 df_pnl_detailed_wide['Employee Cost % of Sales'] = df_pnl_detailed_wide['Employee Cost']/df_pnl_detailed_wide['Sales']*100
 df_pnl_detailed_wide['Selling and admin % of sales'] = df_pnl_detailed_wide['Selling and admin']/df_pnl_detailed_wide['Sales']*100
 df_pnl_detailed_wide['Other Expenses% of sales'] = df_pnl_detailed_wide['Other Expenses']/df_pnl_detailed_wide['Sales']*100
+
+# Net material cost = raw material purchased adjusted for the change in stock.Used as the cost base for inventory and payable days,
+#which is why those days differ from the sales-basis versions.
+df_pnl_detailed_wide["Net Material Cost"] = df_pnl_detailed_wide["Raw Material Cost"] - df_pnl_detailed_wide["Change in Inventory"]
+
+#-----------Working Capital Ratios--------------
+
+df_workincapital_wide['Debtor Days'] = (df_workincapital_wide['Debtors']/df_pnl_detailed_wide['Sales'])*365
+df_workincapital_wide['Inventory turn-over']= df_pnl_wide['Sales']/df_workincapital_wide['Inventory']
+df_workincapital_wide['Inventory Days (sales basis)'] = 365/df_workincapital_wide['Inventory turn-over'] #Sales basis: uses sales as the base, so it is comparable across companies.
+df_workincapital_wide['Inventory Days (cost basis)'] = df_workincapital_wide['Inventory']/df_pnl_detailed_wide['Net Material Cost']*365 #It was created on cost basis and used net Material cost as the COGS were not available.
+df_workincapital_wide['Operating Cycle (sales basis)'] = df_workincapital_wide['Debtor Days']+df_workincapital_wide['Inventory Days (sales basis)'] #Operating Cycle calculated with Debtor days and Inventory Days(Sales Basis) the cash conversion cycle later subtracts payables.
+df_workincapital_wide['Change in Inventory'] = df_workincapital_wide['Inventory']-df_workincapital_wide['Inventory'].shift(1) #Change in Inventory calculated on current year closing minus previous year closing
+df_workincapital_wide['Change in Debtors'] = df_workincapital_wide['Debtors']-df_workincapital_wide['Debtors'].shift(1) #Change in Debtors calculated on current year closing minus previous year closing
+df_workincapital_wide['Cash effect of Inventory'] = df_workincapital_wide['Change in Inventory']*-1  #"*-1" Fliped the sign because rising inventory absorbs cash.
+df_workincapital_wide['Cash effect of Debtors'] = df_workincapital_wide['Change in Debtors']*-1 #"*-1" Fliped the sign because rise in debtors absorbes cash.
+df_workincapital_wide['WC cash effect'] = df_workincapital_wide['Cash effect of Debtors']+df_workincapital_wide['Cash effect of Inventory'] #Debtors and inventory only. Payables are added later in the comparison table.”
+
 
 #===================================
 #               CHARTS               
@@ -89,7 +118,6 @@ axes[0][1].set_yticks([])
 axes[0][1].set_ylim(top=axes[0][1].get_ylim()[1] * 1.20)
 
 # Chart 3: Stacked bar + Sales line
-df_pnl_detailed_wide["Net Material Cost"] = df_pnl_detailed_wide["Raw Material Cost"] - df_pnl_detailed_wide["Change in Inventory"]
 
 expense_columns = [
     "Net Material Cost", "Other Mfr. Exp", "Power and Fuel",
@@ -114,7 +142,7 @@ axes[1][0].legend()
 axes[1][1].set_title("Sales Trend")
 df_pnl_detailed_wide['Sales'].plot(ax=axes[1][1])
 for year, sales_value in zip(df_pnl_wide.index, df_pnl_wide['Sales']):
-    axes[1][0].text(year, total_value - 150, str(round(total_value, 0)), color="white", ha="center", fontsize=9, fontweight="bold")
+    axes[1][1].text(year, sales_value +300, str(round(sales_value, 0)), color="black", ha="center", fontsize=9, fontweight="bold")
 
 axes[1][1].set_yticks([])
 axes[1][1].set_ylim(top=axes[1][1].get_ylim()[1] * 1.10)
@@ -122,12 +150,13 @@ axes[1][1].set_ylabel("Values in Crores")
 
 fig1.tight_layout()
 fig1.savefig("charts/pnl_ratio_chart.png", dpi=200, bbox_inches="tight")
+plt.close(fig1)
 
 #-----------------------------------------------------------------------------------------#
 #                       BALANCE SHEET                           
 #-----------------------------------------------------------------------------------------
 
-df_combined_bs = pd.merge(df_pnl_wide, df_balancesheet_wide, left_index=True, right_index=True)  #Combined Balace Sheet And P&L Statement
+df_combined_bs = pd.merge(df_pnl_wide, df_balancesheet_wide, left_index=True, right_index=True)  #Combined Balance Sheet And P&L Statement
 
 #=============================================
 #               Balancesheet Ratio 
@@ -136,9 +165,6 @@ df_combined_bs = pd.merge(df_pnl_wide, df_balancesheet_wide, left_index=True, ri
 df_combined_bs['ROE%'] = df_combined_bs['Net profit']/(df_combined_bs['Equity Share Capital']+df_combined_bs['Reserves'])*100
 
 df_combined_bs['Debt to Equity'] = df_combined_bs['Borrowings'] / (df_combined_bs['Equity Share Capital']+df_combined_bs['Reserves'])
-
-df_pnl_wide['Interest Coverage'] = df_pnl_wide['Operating Profit'] / df_pnl_wide['Interest']
-
 
 #=================================================
 #            Balancesheet Charts
@@ -178,23 +204,7 @@ axes[1][1].legend()
 
 fig2.tight_layout()
 fig2.savefig("charts/balancesheet_ratio_chart.png", dpi=200, bbox_inches="tight")
-
-
-#-----------Working Capital Ratios--------------
-
-df_workincapital_wide['Debtor Days'] = (df_workincapital_wide['Debtors']/df_pnl_detailed_wide['Sales'])*365
-df_workincapital_wide['Inventory turn-over']= df_pnl_wide['Sales']/df_workincapital_wide['Inventory']
-df_workincapital_wide['Inventory Days (sales basis)'] = 365/df_workincapital_wide['Inventory turn-over']
-df_workincapital_wide['Inventory Days (cost basis)'] = df_workincapital_wide['Inventory']/df_pnl_detailed_wide['Net Material Cost']*365
-df_workincapital_wide['Operating Cycle (sales basis)'] = df_workincapital_wide['Debtor Days']+df_workincapital_wide['Inventory Days (sales basis)']
-df_workincapital_wide['Change in Inventory'] = df_workincapital_wide['Inventory']-df_workincapital_wide['Inventory'].shift(1)
-df_workincapital_wide['Change in Debtors'] = df_workincapital_wide['Debtors']-df_workincapital_wide['Debtors'].shift(1)
-df_workincapital_wide['Cash effect of Inventory'] = df_workincapital_wide['Change in Inventory']*-1
-df_workincapital_wide['Cash effect of Debtors'] = df_workincapital_wide['Change in Debtors']*-1
-df_workincapital_wide['WC cash effect'] = df_workincapital_wide['Cash effect of Debtors']+df_workincapital_wide['Cash effect of Inventory']
-
-
-#print(df_workincapital_wide[['Debtor Days','Inventory Days (sales basis)','Operating Cycle (sales basis)']].round(1))
+plt.close(fig2)
 
 #================================================
 #             Working capital Charts 
@@ -214,14 +224,14 @@ for year, days  in zip(df_workincapital_wide.index, wc_running_total):
 axes.plot(df_workincapital_wide.index, df_workincapital_wide['Operating Cycle (sales basis)'], marker="o", color="black", label="Operating Cycle")
 axes.set_ylabel("Days")
 axes.set_xlabel("Year")
-axes.set_xticks(df_workincapital_wide.index) and axes.set_xticklabels([f"FY{str(y)[-2:]}" for y in df_workincapital_wide.index])
+axes.set_xticks(df_workincapital_wide.index) 
+axes.set_xticklabels([f"FY{str(y)[-2:]}" for y in df_workincapital_wide.index])
 axes.legend()
 axes.set_title("Operating Cycle: Inventory Days + Debtor Days (Sales basis)")
 
 fig3.tight_layout()
 fig3.savefig("charts/working_capital_chart.png", dpi=200, bbox_inches="tight")
-#plt.show()
-
+plt.close(fig3)
 
 #---------------Cash Flow Ratios------------
 df_combined_2 = pd.merge(df_pnl_wide,df_cashflow_wide,left_index= True , right_index= True) #P&L And Cashflow Combined 
@@ -229,23 +239,13 @@ df_combined_2 = pd.merge(df_pnl_wide,df_cashflow_wide,left_index= True , right_i
 
 df_combined_2['cash conversion ratio'] = df_combined_2['Cash from Operating Activity']/df_combined_2['Net profit']
 
-#print(df_combined_2[['Net profit','Cash from Operating Activity','cash conversion ratio']].round(2))
-
-#print(df_cashflow_wide.round(2))
-
-#print(df_workincapital_wide[['Debtors','Change in Debtors','Inventory', 'Change in Inventory','Cash effect of Inventory','Cash effect of Debtors','WC cash effect']])
-
-#print(df_pnl_wide['Depreciation'])
-
-
-
-#creating a conparison table to compare the distrubution across the cashflow 
+#creating a Comparison table to compare the Distribution across the cashflow 
 df_comparison = df_workincapital_wide[["WC cash effect"]].join(df_pnl_wide[["Depreciation", "Net profit"]]).join(df_cashflow_wide[["Cash from Operating Activity"]])
 df_comparison['Gap'] = df_comparison['Cash from Operating Activity']-df_comparison['Net profit']
 df_comparison['Unexplained'] = df_comparison['Gap']-df_comparison['WC cash effect']-df_comparison['Depreciation']
 
 
-#creting trade payble from sources 
+#Creating trade Payable from sources 
 
 data = {'Year':[2020,2021,2022,2023,2024,2025,2026],
     'Trade Payables':[313.27,316.21,362.05,265.39,386.69,634.83,732.50],
@@ -282,8 +282,6 @@ df_comparison['Fixed assets purchased'] = df_capex['Fixed assets purchased']
 
 df_comparison['FCF'] = df_comparison['Cash from Operating Activity']+df_comparison['Fixed assets purchased']
 
-#print(df_comparison.round(1))
-
 #Cash Conversion Chart 
 
 fig4, axes = plt.subplots(figsize=(10,6))
@@ -295,24 +293,25 @@ axes.grid(True)
 axes.set_xlabel("Fiscal Year")
 axes.set_ylabel("Days")
 axes.legend()
-axes.set_title("Cycle ended where it started: shorter supplier credit offset faster inventory")
+axes.set_title("Cash conversion cycle, FY20 to FY26")
 
 fig4.tight_layout()
-fig4.savefig("charts/cash_coversion", dpi=200, bbox_inches="tight")
+fig4.savefig("charts/cash_conversion_cycle_chart.png", dpi=200, bbox_inches="tight")
+plt.close(fig4)
 
 
 #Creating DCF 
 sales_base = 10022.35 #2026 Sales 
 Growth = [0.22, 0.19, 0.16, 0.13, 0.10] #Growth Assumption Rates For 2027 - 2031
 fc_Operating_Margin = [0.08, 0.085, 0.09, 0.095, 0.10] #Forecasted Operating Margin Assumption Rates For 2027 - 2031
-fc_capex = [0.018684, 0.022004, 0.025323, 0.028643, 0.031962]
+fc_capex = [0.018684, 0.022004, 0.025323, 0.028643, 0.031962] #Capex ramps from the FY26 level (154 ÷ 10,022 = 1.54%) up to the depreciation share (3.20%)
 discount_rate = 0.12 #Fixed Discount Rate 
 terminal_growth = 0.05
+tax_rate = 0.25
+wc_pct = 0.1196 #0.1196 is the wc_pct which is derived from (inventory + debtors − payables) ÷ sales.
+dep_share = 320.33 / 10022.35 # Depreciation Share Calculation for future Depreciation values
 
-
-dep_share = 320.33 / 10022.35 # Depriciation Share Calculation for future depriciation values
-
-#calculating forcasted sales value on the basis growth assumption
+#calculating forecasted sales value on the basis growth assumption
 fc_sales = []                       
 current_sales = sales_base          
 
@@ -335,27 +334,23 @@ forecasts['Op Margin'] = fc_Operating_Margin
 forecasts['Op Profit'] = forecasts['Op Margin']*forecasts['Sales']
 forecasts["Depreciation"] = forecasts["Sales"] * dep_share
 forecasts["EBIT"] = forecasts['Op Profit'] - forecasts["Depreciation"] 
-forecasts["NOPAT"] = forecasts["EBIT"] *(1-0.25)
+forecasts["NOPAT"] = forecasts["EBIT"] *(1-tax_rate)
 forecasts["Capex"] = forecasts['Sales']*fc_capex
-forecasts["Increse in WC"] = 0.1196*(forecasts['Sales']-forecasts['Sales'].shift(1,fill_value=sales_base))
-forecasts["FCFF"] = forecasts["NOPAT"]+forecasts["Depreciation"]-forecasts["Capex"]-forecasts["Increse in WC"]
+forecasts["Increase in WC"] = wc_pct*(forecasts['Sales']-forecasts['Sales'].shift(1,fill_value=sales_base))  #0.1196 is the wc_pct which is derived from (inventory + debtors − payables) ÷ sales.
+forecasts["FCFF"] = forecasts["NOPAT"]+forecasts["Depreciation"]-forecasts["Capex"]-forecasts["Increase in WC"]
 
 #discount the cash flows to today
-forecasts["Discount Factor"] = 1/(1.12**(forecasts.index-2026))
+forecasts["Discount Factor"] = 1 / ((1 + discount_rate) ** (forecasts.index - 2026))
 forecasts["PV of FCFF"] = forecasts["FCFF"]*forecasts["Discount Factor"]
 terminal_value = forecasts['FCFF'].iloc[-1]*(1+terminal_growth)/(discount_rate-terminal_growth)
 present_value_tv = terminal_value*forecasts['Discount Factor'].iloc[-1]
 enterprise_value = forecasts['PV of FCFF'].sum()+present_value_tv
 
-
-#print(terminal_value,present_value_tv,enterprise_value)
-#print(present_value_tv/enterprise_value*100)
-
-#calculations on todays value 02-11-2026
+#calculations on today's value 02-11-2026
 Borrowings = 1237.81 #NSE updated borrowings including leases and non current borrowings
 Cash_Bank_bl = 320.03 #FY26 filing, NSE
 Nykaa_share_price = 349.50 #as per NSE on 02-11-2026
-shares_cr = 286.43 
+shares_cr = 286.43 # crore shares, Sep 2026 shareholding
 
 Net_Debt = Borrowings-Cash_Bank_bl
 Equity_Value = enterprise_value-Net_Debt
@@ -363,11 +358,9 @@ Value_per_share =Equity_Value/shares_cr
 
 Upside = round((Value_per_share/Nykaa_share_price-1)*100,1)
 
-#print(Net_Debt,Equity_Value,Value_per_share,Upside)
-
 discount_rates = [0.11, 0.12, 0.13, 0.14]
 growth_rates = [0.04, 0.05, 0.06]
-shares_cr = 286.43                      # crore shares, Sep 2026 shareholding
+
 
 rows = []                               # one row of results per discount rate
 
@@ -388,7 +381,6 @@ sensitivity = pd.DataFrame(rows, index=discount_rates, columns=growth_rates).rou
 sensitivity.index.name = "Discount rate"
 
 ref1 = pd.DataFrame()
-
 ref1['Net profit'] = df_comparison['Net profit']
 ref1['Operating cash flow'] = df_comparison['Cash from Operating Activity']
 ref1['Free cash flow'] = df_comparison['FCF']
@@ -408,8 +400,10 @@ axes.set_ylabel("Rs crore")
 axes.set_xlabel("Fiscal Year")
 plt.xticks(rotation=0)
 axes.legend()
-plt.savefig("charts/cash_flow_chart.png", dpi=200, bbox_inches="tight")
+fig5.savefig("charts/cash_flow_chart.png", dpi=200, bbox_inches="tight")
+plt.close(fig5)
 
 
-
-
+print(sensitivity)
+print(Net_Debt)
+print(Value_per_share)
