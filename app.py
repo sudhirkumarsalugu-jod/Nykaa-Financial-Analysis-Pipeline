@@ -57,7 +57,7 @@ df_pnl_wide['Expense (prev year)'] = df_pnl_wide['Expenses'].shift(1)
 df_pnl_wide['YoY Expense %'] = (df_pnl_wide['Expenses']-df_pnl_wide['Expense (prev year)'])/df_pnl_wide['Expense (prev year)']*100
 df_pnl_wide["Interest % of sales"] = df_pnl_wide['Interest']/df_pnl_wide['Sales']*100
 df_pnl_wide["Depreciation % of sales"] = df_pnl_wide['Depreciation']/df_pnl_wide['Sales']*100
-df_pnl_wide['Interest Coverage'] = df_pnl_wide['Operating Profit'] / df_pnl_wide['Interest'] #interest coverage uses that EBITDA-like profit, so it is flattering compared with an EBIT version
+df_pnl_wide['Interest Coverage'] = df_pnl_wide['Operating Profit'] / df_pnl_wide['Interest'] #Coverage = EBITDA-like operating profit ÷ interest
 
 #Creating Detailed Ratios
 df_pnl_detailed_wide['Raw Material % of sales'] = df_pnl_detailed_wide['Raw Material Cost']/df_pnl_detailed_wide['Sales']*100
@@ -406,4 +406,4 @@ plt.close(fig5)
 
 print(sensitivity)
 print(Net_Debt)
-print(Value_per_share)
+print(Value_per_share.round(1))
